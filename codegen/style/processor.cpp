@@ -30,6 +30,8 @@ Processor::Processor(const Options &options)
 
 int Processor::launch() {
 	auto cache = std::map<QString, std::shared_ptr<const structure::Module>>();
+	auto md3Caches = std::vector<std::map<QString, std::shared_ptr<const structure::Module>>>(
+		ParsedFile::Md3GroupsCount() + 1);
 	for (auto i = 0; i != options_.inputPaths.size(); ++i) {
 		auto parser = ParsedFile(cache, options_, i);
 		if (!parser.read()) {
@@ -37,7 +39,20 @@ int Processor::launch() {
 		}
 
 		const auto module = parser.getResult();
-		if (!write(*module)) {
+		auto md3 = std::vector<std::shared_ptr<const structure::Module>>();
+		if (!options_.isPalette) {
+			for (auto pass = 0; pass != int(md3Caches.size()); ++pass) {
+				auto options = options_;
+				options.md3Pass = pass;
+				auto md3Parser = ParsedFile(md3Caches[pass], options, i);
+				if (!md3Parser.read()) {
+					return -1;
+				}
+				md3.push_back(std::shared_ptr<const structure::Module>(
+					md3Parser.getResult().release()));
+			}
+		}
+		if (!write(*module, md3)) {
 			return -1;
 		}
 	}
@@ -47,7 +62,9 @@ int Processor::launch() {
 	return 0;
 }
 
-bool Processor::write(const structure::Module &module) const {
+bool Processor::write(
+		const structure::Module &module,
+		const std::vector<std::shared_ptr<const structure::Module>> &md3) const {
 	bool forceReGenerate = false;
 	QDir dir(options_.outputPath);
 	if (!dir.mkpath(".")) {
@@ -64,7 +81,7 @@ bool Processor::write(const structure::Module &module) const {
 		forceReGenerate
 	};
 
-	Generator generator(module, dstFilePath, project, options_.isPalette);
+	Generator generator(module, dstFilePath, project, options_.isPalette, md3);
 	if (!generator.writeHeader() || !generator.writeSource()) {
 		return false;
 	}

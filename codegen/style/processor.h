@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 #include <QtCore/QString>
 #include "codegen/style/options.h"
 
@@ -31,7 +32,9 @@ public:
 	~Processor();
 
 private:
-	bool write(const structure::Module &module) const;
+	bool write(
+		const structure::Module &module,
+		const std::vector<std::shared_ptr<const structure::Module>> &md3) const;
 
 	const Options &options_;
 

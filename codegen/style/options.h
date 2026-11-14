@@ -18,6 +18,7 @@ struct Options {
 	QString timestampPath;
 	QStringList inputPaths;
 	bool isPalette = false;
+	int md3Pass = -1;
 
 	// --render-svg mode: render SVG to PNG preview.
 	QString renderSvgInput;

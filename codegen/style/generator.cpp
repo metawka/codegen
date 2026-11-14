@@ -18,6 +18,7 @@
 #include <QtGui/QImage>
 #include <QtGui/QPainter>
 #include <QtSvg/QSvgRenderer>
+#include <QtCore/QFileInfo>
 #include "codegen/style/parsed_file.h"
 
 using Module = codegen::style::structure::Module;
@@ -160,12 +161,18 @@ QString paletteColorValue(const structure::data::color &value) {
 
 } // namespace
 
-Generator::Generator(const structure::Module &module, const QString &destBasePath, const common::ProjectInfo &project, bool isPalette)
+Generator::Generator(
+	const structure::Module &module,
+	const QString &destBasePath,
+	const common::ProjectInfo &project,
+	bool isPalette,
+	std::vector<std::shared_ptr<const structure::Module>> md3)
 : module_(module)
 , basePath_(destBasePath)
 , baseName_(QFileInfo(basePath_).baseName())
 , project_(project)
-, isPalette_(isPalette) {
+, isPalette_(isPalette)
+, md3_(std::move(md3)) {
 }
 
 bool Generator::writeHeader() {
@@ -346,8 +353,19 @@ QString Generator::valueAssignmentCode(
 			}
 			auto color = valueAssignmentCode(part.color);
 			auto padding = valueAssignmentCode(part.padding);
-			parts.push_back(QString("MonoIcon{ &iconMask%1, %2, %3 }").arg(
-				QString::number(maskIndex),
+			auto mask = QString("&iconMask%1").arg(maskIndex);
+			if (md3Icons_ && part.filename.contains("/icons/md3/")) {
+				auto fill = part.filename;
+				fill.replace("/icons/md3/", "/icons/md3f/");
+				const auto fillIndex = iconMasks_.value(fill, -1);
+				if (fillIndex >= 0) {
+					mask = QString("(style::internal::Md3Fill() ? &iconMask%1 : &iconMask%2)").arg(
+						QString::number(fillIndex),
+						QString::number(maskIndex));
+				}
+			}
+			parts.push_back(QString("MonoIcon{ %1, %2, %3 }").arg(
+				mask,
 				color,
 				padding));
 		}
@@ -999,9 +1017,58 @@ void init_" << baseName_ << "(int scale) {\n\
 		if (value.isEmpty()) {
 			return false;
 		}
-		if (!IsValueInHeader(variable.value.type())) {
-			source_->stream() << "\t_" << name << " = " << value << ";\n";
+		if (IsValueInHeader(variable.value.type())) {
+			return true;
 		}
+		auto variants = std::vector<QString>();
+		for (const auto &md3 : md3_) {
+			const auto found = structure::Module::findVariableInModule(
+				variable.name,
+				*md3);
+			if (!found) {
+				variants.push_back(value);
+				continue;
+			}
+			md3Icons_ = true;
+			auto code = valueAssignmentCode(found->value);
+			md3Icons_ = false;
+			if (code.isEmpty()) {
+				return false;
+			}
+			variants.push_back(code);
+		}
+		if (variants.empty() || variants[0] == value) {
+			auto same = true;
+			for (const auto &code : variants) {
+				same = same && (code == value);
+			}
+			if (same) {
+				source_->stream() << "\t_" << name << " = " << value << ";\n";
+				return true;
+			}
+		}
+		auto taint = std::vector<int>();
+		for (auto g = 1; g < int(variants.size()); ++g) {
+			if (variants[g] != value) {
+				taint.push_back(g);
+			}
+		}
+		const auto all = variants[0];
+		const auto bit = [](int g) { return QString::number(1 << (g - 1)); };
+		auto mask = 0;
+		for (const auto g : taint) {
+			mask |= (1 << (g - 1));
+		}
+		if (taint.empty()) {
+			mask = (1 << (int(variants.size()) - 1)) - 1;
+		}
+		source_->stream() << "\tif (style::internal::Md3(" << mask << ")) {\n\t\t_" << name << " = " << all << ";\n\t}";
+		if (taint.size() > 1) {
+			for (const auto g : taint) {
+				source_->stream() << " else if (style::internal::Md3(" << bit(g) << ")) {\n\t\t_" << name << " = " << variants[g] << ";\n\t}";
+			}
+		}
+		source_->stream() << " else {\n\t\t_" << name << " = " << value << ";\n\t}\n";
 		return true;
 	})) {
 		return false;
@@ -1296,7 +1363,31 @@ bool Generator::collectUniqueValues() {
 		}
 		return true;
 	};
-	return module_.enumVariables(collector);
+	if (!module_.enumVariables(collector)) {
+		return false;
+	}
+	for (const auto &md3 : md3_) {
+		if (!md3->enumVariables(collector)) {
+			return false;
+		}
+	}
+	auto fills = QStringList();
+	for (auto i = iconMasks_.cbegin(); i != iconMasks_.cend(); ++i) {
+		if (i.key().contains("/icons/md3/")) {
+			auto fill = i.key();
+			fill.replace("/icons/md3/", "/icons/md3f/");
+			const auto base = fill.split('-')[0];
+			if (!iconMasks_.contains(fill)
+				&& (QFileInfo(base + ".svg").exists()
+					|| QFileInfo(base + ".png").exists())) {
+				fills.push_back(fill);
+			}
+		}
+	}
+	for (const auto &fill : fills) {
+		iconMasks_.insert(fill, ++iconMaskIndex);
+	}
+	return true;
 }
 
 } // namespace style

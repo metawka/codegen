@@ -35,23 +35,25 @@ public:
 
 	bool read();
 
+	static int Md3GroupsCount();
+
 	std::unique_ptr<const structure::Module> getResult() {
 		return std::move(module_);
 	}
 
 private:
 	bool failed() const {
-		return failed_ || file_.failed();
+		return failed_ || file_->failed();
 	}
 
 	// Log error to std::cerr with 'code' at the current position in file.
 	common::LogStream logError(int code) {
 		failed_ = true;
-		return file_.logError(code);
+		return file_->logError(code);
 	}
 	common::LogStream logErrorUnexpectedToken() {
 		failed_ = true;
-		return file_.logErrorUnexpectedToken();
+		return file_->logErrorUnexpectedToken();
 	}
 	common::LogStream logErrorTypeMismatch();
 	common::LogStream logAssert(bool assertion) {
@@ -97,6 +99,7 @@ private:
 
 	structure::data::monoicon readMonoIconFields();
 	QString readMonoIconFilename();
+	QString md3IconFor(const QString &filepath, const QStringList &modifiers);
 
 	// Read next token and fire unexpected token error if it is not of "type".
 	using BasicToken = common::BasicTokenizedFile::Token;
@@ -111,7 +114,19 @@ private:
 	std::map<QString, std::shared_ptr<const structure::Module>> includeCache_;
 
 	QString filePath_;
-	common::BasicTokenizedFile file_;
+	common::BasicTokenizedFile mainFile_;
+	common::BasicTokenizedFile *file_ = &mainFile_;
+
+	struct Md3Entry {
+		QByteArray value;
+		int group = 0;
+		bool applied = false;
+	};
+	bool readMd3Overlay();
+	bool applyMd3(const QString &name);
+	std::map<QString, Md3Entry> md3_;
+	QString md3Path_;
+	QString currentVariable_;
 	Options options_;
 	bool failed_ = false;
 	std::unique_ptr<structure::Module> module_;

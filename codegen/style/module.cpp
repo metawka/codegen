@@ -54,6 +54,15 @@ bool Module::addVariable(const Variable &value) {
 	return true;
 }
 
+bool Module::replaceVariable(const Variable &value) {
+	auto index = variablesByName_.value(fullNameKey(value.name), -1);
+	if (index < 0) {
+		return false;
+	}
+	variables_[index] = value;
+	return true;
+}
+
 const Variable *Module::findVariable(const FullName &name, bool *outFromThisModule) const {
 	if (auto result = findVariableInModule(name, *this)) {
 		if (outFromThisModule) *outFromThisModule = true;

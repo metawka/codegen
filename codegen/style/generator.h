@@ -9,6 +9,7 @@
 #include <memory>
 #include <map>
 #include <functional>
+#include <vector>
 #include <QtCore/QString>
 #include <QtCore/QSet>
 #include <QtCore/QMap>
@@ -23,7 +24,12 @@ class Module;
 
 class Generator {
 public:
-	Generator(const structure::Module &module, const QString &destBasePath, const common::ProjectInfo &project, bool isPalette);
+	Generator(
+		const structure::Module &module,
+		const QString &destBasePath,
+		const common::ProjectInfo &project,
+		bool isPalette,
+		std::vector<std::shared_ptr<const structure::Module>> md3 = {});
 	Generator(const Generator &other) = delete;
 	Generator &operator=(const Generator &other) = delete;
 
@@ -60,6 +66,8 @@ private:
 	const common::ProjectInfo &project_;
 	std::unique_ptr<common::CppFile> source_, header_;
 	bool isPalette_ = false;
+	std::vector<std::shared_ptr<const structure::Module>> md3_;
+	mutable bool md3Icons_ = false;
 
 	QMap<int, bool> pxValues_;
 	QMap<std::string, int> fontFamilies_;
