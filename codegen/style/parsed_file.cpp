@@ -1144,7 +1144,31 @@ QString ParsedFile::readMonoIconFilename() {
 					return QString();
 				}
 			}
-			if (options_.md3Pass == 0 || options_.md3Pass == 1) {
+			const auto standard = [&] {
+				for (auto &path : options_.includePaths) {
+					QFileInfo png(path + '/' + filepath + ".png");
+					QFileInfo svg(path + '/' + filepath + ".svg");
+					if (png.exists() || svg.exists()) {
+						return path + '/' + fullpath;
+					}
+				}
+				for (auto &path : options_.includePaths) {
+					QFileInfo png(path + "/icons/" + filepath + ".png");
+					QFileInfo svg(path + "/icons/" + filepath + ".svg");
+					if (png.exists() || svg.exists()) {
+						return path + "/icons/" + fullpath;
+					}
+				}
+				return QString();
+			};
+			const auto withStandard = [&](const QString &md3) {
+				const auto original = standard();
+				return (original.isEmpty() || original == md3)
+					? md3
+					: (md3 + '|' + original);
+			};
+			if ((options_.md3Pass == 0 || options_.md3Pass == 1)
+				&& !currentVariable_.contains("NoMd3")) {
 				const auto slash = filepath.lastIndexOf('/');
 				const auto filled = filepath.left(slash + 1)
 					+ "filled/"
@@ -1154,8 +1178,8 @@ QString ParsedFile::readMonoIconFilename() {
 						const auto base = path + "/icons/mg/" + filled;
 						if (QFileInfo(base + ".png").exists()
 							|| QFileInfo(base + ".svg").exists()) {
-							return path + "/icons/mg/" + filled
-								+ fullpath.mid(filepath.size());
+							return withStandard(path + "/icons/mg/" + filled
+								+ fullpath.mid(filepath.size()));
 						}
 					}
 				}
@@ -1163,12 +1187,12 @@ QString ParsedFile::readMonoIconFilename() {
 					const auto base = path + "/icons/mg/" + filepath;
 					if (QFileInfo(base + ".png").exists()
 						|| QFileInfo(base + ".svg").exists()) {
-						return path + "/icons/mg/" + fullpath;
+						return withStandard(path + "/icons/mg/" + fullpath);
 					}
 				}
 				const auto mapped = md3IconFor(filepath, modifiers);
 				if (!mapped.isEmpty()) {
-					return mapped;
+					return withStandard(mapped);
 				}
 			}
 			for (auto &path : options_.includePaths) {

@@ -347,21 +347,31 @@ QString Generator::valueAssignmentCode(
 		auto v(value.Icon());
 		QStringList parts = { "std::in_place" };
 		for (const auto &part : v.parts) {
-			auto maskIndex = iconMasks_.value(part.filename, -1);
+			const auto files = part.filename.split('|');
+			const auto file = files[0];
+			auto maskIndex = iconMasks_.value(file, -1);
 			if (maskIndex < 0) {
 				return QString();
 			}
 			auto color = valueAssignmentCode(part.color);
 			auto padding = valueAssignmentCode(part.padding);
 			auto mask = QString("&iconMask%1").arg(maskIndex);
-			if (md3Icons_ && part.filename.contains("/icons/md3/")) {
-				auto fill = part.filename;
+			if (md3Icons_ && file.contains("/icons/md3/")) {
+				auto fill = file;
 				fill.replace("/icons/md3/", "/icons/md3f/");
 				const auto fillIndex = iconMasks_.value(fill, -1);
 				if (fillIndex >= 0) {
 					mask = QString("(style::internal::Md3Fill() ? &iconMask%1 : &iconMask%2)").arg(
 						QString::number(fillIndex),
 						QString::number(maskIndex));
+				}
+			}
+			if (files.size() > 1) {
+				const auto standardIndex = iconMasks_.value(files[1], -1);
+				if (standardIndex >= 0) {
+					mask = QString("(style::internal::Md3Icons() ? %1 : &iconMask%2)").arg(
+						mask,
+						QString::number(standardIndex));
 				}
 			}
 			parts.push_back(QString("MonoIcon{ %1, %2, %3 }").arg(
@@ -1343,8 +1353,10 @@ bool Generator::collectUniqueValues() {
 				pxValues_.insert(p.top, true);
 				pxValues_.insert(p.right, true);
 				pxValues_.insert(p.bottom, true);
-				if (!iconMasks_.contains(part.filename)) {
-					iconMasks_.insert(part.filename, ++iconMaskIndex);
+				for (const auto &file : part.filename.split('|')) {
+					if (!iconMasks_.contains(file)) {
+						iconMasks_.insert(file, ++iconMaskIndex);
+					}
 				}
 			}
 		} break;
